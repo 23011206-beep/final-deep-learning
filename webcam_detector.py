@@ -3,6 +3,11 @@ Real-time PCB Defect Detection from Webcam
 ============================================
 Ứng dụng phát hiện lỗi PCB trong thời gian thực sử dụng trained YOLOv8 model
 
+Cải tiến:
+- Giữ bounding box tối thiểu 2 giây sau khi phát hiện
+- Theo dõi lỗi qua các frame (IoU tracking)
+- Hiệu ứng mờ dần khi hết thời gian giữ
+
 Các loại lỗi phát hiện:
 - missing_hole: Lỗ bị thiếu
 - mouse_bite: Vết cắn chuột
@@ -13,6 +18,7 @@ Các loại lỗi phát hiện:
 
 Usage:
     python webcam_detector.py --weights runs/detect/pcb_defect_detector/weights/best.pt
+    python webcam_detector.py --weights best.pt --hold-time 3.0 --conf 0.3
 """
 
 import argparse
@@ -47,6 +53,12 @@ def main():
         help='NMS IoU threshold'
     )
     parser.add_argument(
+        '--hold-time',
+        type=float,
+        default=2.0,
+        help='Thời gian giữ detection trên màn hình (giây, mặc định 2.0)'
+    )
+    parser.add_argument(
         '--window-name',
         type=str,
         default='PCB Defect Detector',
@@ -64,7 +76,8 @@ def main():
     detector = WebcamDefectDetector(
         model_path=args.weights,
         conf_threshold=args.conf,
-        iou_threshold=args.iou
+        iou_threshold=args.iou,
+        hold_time=args.hold_time
     )
     
     # Run detection
@@ -77,3 +90,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

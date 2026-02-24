@@ -24,6 +24,7 @@ Hỗ trợ:
 
 import os
 import yaml
+import time
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import cv2
@@ -556,18 +557,136 @@ class DefectDetector:
         return df
 
 
+class TrackedDetection:
+    """
+    Lưu trữ thông tin một lỗi đã phát hiện với khả năng giữ lại trên màn hình.
+    
+    Mỗi detection được theo dõi qua các frame bằng IoU matching.
+    Khi không còn phát hiện lại, nó sẽ được giữ thêm ít nhất 2 giây
+    và mờ dần trước khi biến mất.
+    """
+    
+    def __init__(self, bbox, class_id, class_name, confidence, color, hold_time=2.0):
+        """
+        Args:
+            bbox: (x1, y1, x2, y2) tọa độ bounding box
+            class_id: ID của loại lỗi
+            class_name: Tên loại lỗi
+            confidence: Độ tin cậy
+            color: Màu BGR
+            hold_time: Thời gian giữ tối thiểu trên màn hình (giây)
+        """
+        self.bbox = bbox  # (x1, y1, x2, y2)
+        self.class_id = class_id
+        self.class_name = class_name
+        self.confidence = confidence
+        self.smoothed_confidence = confidence  # Trung bình trượt
+        self.color = color
+        self.hold_time = hold_time
+        
+        self.first_seen = time.time()
+        self.last_seen = time.time()
+        self.hit_count = 1  # Số frame phát hiện được
+        self.miss_count = 0  # Số frame liên tiếp bị mất
+        self.is_active = True  # Có đang được phát hiện ở frame hiện tại không
+    
+    def update(self, bbox, confidence):
+        """Cập nhật khi phát hiện lại ở frame mới"""
+        # Làm mượt vị trí bounding box (trung bình giữa cũ và mới)
+        smooth_factor = 0.6  # 60% vị trí mới, 40% vị trí cũ
+        self.bbox = tuple(
+            int(smooth_factor * new + (1 - smooth_factor) * old)
+            for new, old in zip(bbox, self.bbox)
+        )
+        
+        # Làm mượt confidence
+        self.smoothed_confidence = 0.7 * confidence + 0.3 * self.smoothed_confidence
+        self.confidence = confidence
+        
+        self.last_seen = time.time()
+        self.hit_count += 1
+        self.miss_count = 0
+        self.is_active = True
+    
+    def mark_missed(self):
+        """Đánh dấu là không phát hiện được ở frame hiện tại"""
+        self.miss_count += 1
+        self.is_active = False
+    
+    def get_opacity(self):
+        """
+        Tính độ mờ (opacity) dựa trên thời gian kể từ lần cuối phát hiện.
+        - Nếu đang được phát hiện: opacity = 1.0
+        - Trong thời gian hold: opacity = 1.0
+        - Sau thời gian hold: mờ dần từ 1.0 xuống 0.0 trong 0.5 giây
+        """
+        if self.is_active:
+            return 1.0
+        
+        elapsed = time.time() - self.last_seen
+        
+        if elapsed <= self.hold_time:
+            return 1.0
+        
+        # Fade out trong 0.5 giây sau khi hết hold_time
+        fade_duration = 0.5
+        fade_progress = (elapsed - self.hold_time) / fade_duration
+        return max(0.0, 1.0 - fade_progress)
+    
+    def is_expired(self):
+        """Kiểm tra detection này đã hết hạn chưa (đã mờ hoàn toàn)"""
+        return self.get_opacity() <= 0.0
+
+
+def _compute_iou(box1, box2):
+    """
+    Tính IoU (Intersection over Union) giữa 2 bounding box.
+    
+    Args:
+        box1: (x1, y1, x2, y2)
+        box2: (x1, y1, x2, y2)
+    
+    Returns:
+        IoU score (0.0 - 1.0)
+    """
+    x1 = max(box1[0], box2[0])
+    y1 = max(box1[1], box2[1])
+    x2 = min(box1[2], box2[2])
+    y2 = min(box1[3], box2[3])
+    
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
+    
+    area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+    
+    union = area1 + area2 - intersection
+    
+    if union == 0:
+        return 0.0
+    
+    return intersection / union
+
+
 class WebcamDefectDetector:
     """
-    Real-time PCB defect detection từ webcam
+    Real-time PCB defect detection từ webcam (Phiên bản cải tiến)
     
     Phát hiện lỗi PCB trong thời gian thực thông qua camera.
+    
+    Cải tiến:
+    - Giữ bounding box trên màn hình tối thiểu 2 giây
+    - Theo dõi lỗi qua các frame bằng IoU matching
+    - Hiệu ứng mờ dần khi lỗi hết thời gian hiển thị
+    - Làm mượt vị trí và confidence để tránh nhảy giật
     """
     
     def __init__(
         self,
         model_path: str,
         conf_threshold: float = 0.25,
-        iou_threshold: float = 0.45
+        iou_threshold: float = 0.45,
+        hold_time: float = 2.0,
+        match_iou_threshold: float = 0.3
     ):
         """
         Initialize webcam defect detector
@@ -576,11 +695,18 @@ class WebcamDefectDetector:
             model_path: Path to trained model (.pt file)
             conf_threshold: Confidence threshold
             iou_threshold: NMS IoU threshold
+            hold_time: Thời gian giữ detection trên màn hình (giây), mặc định 2s
+            match_iou_threshold: Ngưỡng IoU để gộp detection giữa các frame
         """
         print(f"Loading PCB defect detection model from {model_path}...")
         self.model = YOLO(model_path)
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
+        self.hold_time = hold_time
+        self.match_iou_threshold = match_iou_threshold
+        
+        # Danh sách các detection đang được theo dõi
+        self.tracked_detections: list = []
         
         # Get class names
         self.class_names = self.model.names
@@ -590,6 +716,7 @@ class WebcamDefectDetector:
         
         print("✓ Model loaded successfully!")
         print(f"✓ Defect types: {len(self.class_names)}")
+        print(f"✓ Detection hold time: {hold_time}s")
         for class_id, class_name in self.class_names.items():
             severity = DEFECT_SEVERITY.get(class_name, '?')
             print(f"  - {class_name} [{severity}]")
@@ -605,6 +732,143 @@ class WebcamDefectDetector:
                 colors[class_id] = tuple(map(int, np.random.randint(50, 255, 3)))
         return colors
     
+    def _update_tracked_detections(self, new_detections):
+        """
+        Cập nhật danh sách tracked detections bằng IoU matching.
+        
+        - Detection mới trùng vị trí (IoU cao) với detection cũ → cập nhật
+        - Detection mới không trùng → thêm mới
+        - Detection cũ không được match → đánh dấu missed (giữ lại trên màn hình)
+        
+        Args:
+            new_detections: List of (bbox, class_id, class_name, confidence)
+        """
+        # Đánh dấu tất cả detection cũ là chưa được match
+        matched_old = [False] * len(self.tracked_detections)
+        matched_new = [False] * len(new_detections)
+        
+        # Thử match detection mới với detection cũ (cùng class_id và IoU cao)
+        for j, (new_bbox, new_class_id, new_class_name, new_conf) in enumerate(new_detections):
+            best_iou = 0.0
+            best_idx = -1
+            
+            for i, tracked in enumerate(self.tracked_detections):
+                if matched_old[i]:
+                    continue
+                if tracked.class_id != new_class_id:
+                    continue
+                
+                iou = _compute_iou(new_bbox, tracked.bbox)
+                if iou > best_iou:
+                    best_iou = iou
+                    best_idx = i
+            
+            if best_iou >= self.match_iou_threshold and best_idx >= 0:
+                # Match thành công → cập nhật detection cũ
+                self.tracked_detections[best_idx].update(new_bbox, new_conf)
+                matched_old[best_idx] = True
+                matched_new[j] = True
+        
+        # Lưu lại số lượng detection cũ trước khi thêm mới
+        old_count = len(self.tracked_detections)
+        
+        # Thêm các detection mới không match được
+        for j, (new_bbox, new_class_id, new_class_name, new_conf) in enumerate(new_detections):
+            if not matched_new[j]:
+                color = self.colors.get(new_class_id, (0, 255, 0))
+                self.tracked_detections.append(
+                    TrackedDetection(
+                        bbox=new_bbox,
+                        class_id=new_class_id,
+                        class_name=new_class_name,
+                        confidence=new_conf,
+                        color=color,
+                        hold_time=self.hold_time
+                    )
+                )
+        
+        # Đánh dấu các detection cũ không được match là missed
+        # Chỉ duyệt trong phạm vi detection cũ (old_count), không duyệt detection mới thêm
+        for i in range(old_count):
+            if not matched_old[i] and self.tracked_detections[i].is_active:
+                self.tracked_detections[i].mark_missed()
+        
+        # Xóa các detection đã hết hạn (đã mờ hoàn toàn)
+        self.tracked_detections = [
+            t for t in self.tracked_detections if not t.is_expired()
+        ]
+    
+    def _draw_tracked_detection(self, frame, detection):
+        """
+        Vẽ một tracked detection lên frame với hiệu ứng opacity.
+        
+        Args:
+            frame: OpenCV frame (sẽ bị modified in-place)
+            detection: TrackedDetection object
+        """
+        opacity = detection.get_opacity()
+        if opacity <= 0.0:
+            return
+        
+        x1, y1, x2, y2 = detection.bbox
+        severity = DEFECT_SEVERITY.get(detection.class_name, '?')
+        
+        # Điều chỉnh màu theo opacity
+        color = detection.color
+        if opacity < 1.0:
+            # Blend với màu xám khi đang fade out
+            color = tuple(int(c * opacity) for c in color)
+        
+        # Độ dày viền: dày hơn cho lỗi nghiêm trọng
+        thickness = 3 if severity in ['CRITICAL', 'HIGH'] else 2
+        
+        if opacity >= 1.0:
+            # Vẽ trực tiếp khi opacity = 1.0
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
+        else:
+            # Vẽ lên overlay rồi blend khi opacity < 1.0
+            overlay = frame.copy()
+            cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thickness)
+            cv2.addWeighted(overlay, opacity, frame, 1 - opacity, 0, frame)
+        
+        # Chuẩn bị label
+        conf_display = detection.smoothed_confidence
+        status_icon = "●" if detection.is_active else "○"
+        label = f"{status_icon} {detection.class_name} [{severity}]: {conf_display:.2f}"
+        
+        # Kích thước label
+        (label_w, label_h), baseline = cv2.getTextSize(
+            label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1
+        )
+        
+        # Vẽ nền label
+        label_bg_color = color if opacity >= 1.0 else tuple(int(c * opacity) for c in detection.color)
+        
+        if opacity >= 1.0:
+            cv2.rectangle(
+                frame,
+                (x1, y1 - label_h - baseline - 5),
+                (x1 + label_w, y1),
+                label_bg_color, -1
+            )
+            cv2.putText(
+                frame, label, (x1, y1 - baseline - 2),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA
+            )
+        else:
+            overlay = frame.copy()
+            cv2.rectangle(
+                overlay,
+                (x1, y1 - label_h - baseline - 5),
+                (x1 + label_w, y1),
+                detection.color, -1
+            )
+            cv2.putText(
+                overlay, label, (x1, y1 - baseline - 2),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA
+            )
+            cv2.addWeighted(overlay, opacity, frame, 1 - opacity, 0, frame)
+    
     def run(
         self,
         camera_id: int = 0,
@@ -612,7 +876,12 @@ class WebcamDefectDetector:
         display_fps: bool = True
     ):
         """
-        Run real-time defect detection từ webcam
+        Run real-time defect detection từ webcam (Phiên bản cải tiến)
+        
+        Tính năng:
+        - Giữ bounding box tối thiểu 2 giây sau khi phát hiện
+        - Hiệu ứng mờ dần khi hết thời gian giữ
+        - Theo dõi lỗi qua các frame (IoU tracking)
         
         Args:
             camera_id: Camera ID (0 for default webcam)
@@ -632,13 +901,14 @@ class WebcamDefectDetector:
         fps = int(cap.get(cv2.CAP_PROP_FPS))
         
         print("\n" + "="*70)
-        print("REAL-TIME PCB DEFECT DETECTION")
+        print("REAL-TIME PCB DEFECT DETECTION (Enhanced)")
         print("="*70)
         print(f"Camera ID: {camera_id}")
         print(f"Resolution: {width}x{height}")
         print(f"FPS: {fps}")
         print(f"Confidence threshold: {self.conf_threshold}")
         print(f"IoU threshold: {self.iou_threshold}")
+        print(f"Detection hold time: {self.hold_time}s")
         print(f"\nDefect Types:")
         for class_id, class_name in self.class_names.items():
             severity = DEFECT_SEVERITY.get(class_name, '?')
@@ -650,6 +920,7 @@ class WebcamDefectDetector:
         print("  - Press 'p' to pause/resume")
         print("  - Press '+' to increase confidence threshold")
         print("  - Press '-' to decrease confidence threshold")
+        print("  - ● = đang phát hiện, ○ = đang giữ trên màn hình")
         print("="*70 + "\n")
         
         # FPS calculation
@@ -659,6 +930,9 @@ class WebcamDefectDetector:
         
         paused = False
         frame_count = 0
+        
+        # Reset tracked detections
+        self.tracked_detections = []
         
         try:
             while True:
@@ -680,65 +954,38 @@ class WebcamDefectDetector:
                         verbose=False
                     )
                     
-                    # Draw detections
-                    detection_count = 0
-                    severity_in_frame = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
-                    
+                    # Thu thập các detection mới từ frame hiện tại
+                    new_detections = []
                     for result in results:
                         boxes = result.boxes
-                        
                         for box in boxes:
-                            detection_count += 1
-                            
-                            # Get box info
                             x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
-                            conf = float(box.conf[0].cpu().numpy())
+                            conf_val = float(box.conf[0].cpu().numpy())
                             class_id = int(box.cls[0].cpu().numpy())
                             class_name = self.class_names[class_id]
-                            severity = DEFECT_SEVERITY.get(class_name, '?')
-                            
-                            # Track severity
+                            new_detections.append(
+                                ((x1, y1, x2, y2), class_id, class_name, conf_val)
+                            )
+                    
+                    # Cập nhật hệ thống tracking
+                    self._update_tracked_detections(new_detections)
+                    
+                    # Vẽ tất cả tracked detections (bao gồm cả những cái đang giữ)
+                    for detection in self.tracked_detections:
+                        self._draw_tracked_detection(frame, detection)
+                    
+                    # Đếm số lỗi đang hiển thị
+                    active_count = sum(1 for d in self.tracked_detections if d.is_active)
+                    held_count = sum(1 for d in self.tracked_detections if not d.is_active and not d.is_expired())
+                    total_display = active_count + held_count
+                    
+                    # Tính severity
+                    severity_in_frame = {'CRITICAL': 0, 'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
+                    for d in self.tracked_detections:
+                        if not d.is_expired():
+                            severity = DEFECT_SEVERITY.get(d.class_name, '?')
                             if severity in severity_in_frame:
                                 severity_in_frame[severity] += 1
-                            
-                            # Get color
-                            color = self.colors[class_id]
-                            
-                            # Draw bounding box (thicker for critical defects)
-                            thickness = 3 if severity in ['CRITICAL', 'HIGH'] else 2
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
-                            
-                            # Prepare label with severity
-                            label = f"{class_name} [{severity}]: {conf:.2f}"
-                            
-                            # Get label size
-                            (label_w, label_h), baseline = cv2.getTextSize(
-                                label,
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.5,
-                                1
-                            )
-                            
-                            # Draw label background
-                            cv2.rectangle(
-                                frame,
-                                (x1, y1 - label_h - baseline - 5),
-                                (x1 + label_w, y1),
-                                color,
-                                -1
-                            )
-                            
-                            # Draw label text
-                            cv2.putText(
-                                frame,
-                                label,
-                                (x1, y1 - baseline - 2),
-                                cv2.FONT_HERSHEY_SIMPLEX,
-                                0.5,
-                                (255, 255, 255),
-                                1,
-                                cv2.LINE_AA
-                            )
                     
                     # Calculate FPS
                     fps_frame_count += 1
@@ -749,7 +996,7 @@ class WebcamDefectDetector:
                         fps_frame_count = 0
                     
                     # QC Status
-                    if detection_count == 0:
+                    if total_display == 0:
                         qc_status = "PASS"
                         qc_color = (0, 255, 0)  # Green
                     elif severity_in_frame['CRITICAL'] > 0:
@@ -766,9 +1013,10 @@ class WebcamDefectDetector:
                     if display_fps:
                         info_text = [
                             f"FPS: {current_fps:.1f}",
-                            f"Defects: {detection_count}",
+                            f"Defects: {active_count} ({held_count} held)",
                             f"QC: {qc_status}",
                             f"Conf: {self.conf_threshold:.2f}",
+                            f"Hold: {self.hold_time:.1f}s",
                             f"Frame: {frame_count}"
                         ]
                         
@@ -841,6 +1089,7 @@ class WebcamDefectDetector:
             # Cleanup
             cap.release()
             cv2.destroyAllWindows()
+            self.tracked_detections = []
             
             print("\n" + "="*70)
             print(f"Total frames processed: {frame_count}")
