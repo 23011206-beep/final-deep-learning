@@ -1,0 +1,46 @@
+# PCB Defect Detection Requirements
+# ====================================
+# Dependencies for YOLOv8 PCB Defect Detector
+# Phát hiện và khoanh vùng lỗi trên mạch PCB
+# Generated: 2026-02-22
+
+# INSTALLATION INSTRUCTIONS:
+# For PyTorch with CUDA support, install from PyTorch index first:
+# uv pip install torch==2.9.1 torchvision==0.24.1 --index-url https://download.pytorch.org/whl/cu130
+# Then install the rest: uv pip install -r requirements.txt
+
+# === CORE DEPENDENCIES (Required) ===
+
+# Deep Learning & Computer Vision
+ultralytics==8.4.14          # YOLOv8 (includes torch dependency check)
+opencv-python==4.13.0.90     # Computer vision operations
+
+# Data Processing
+numpy==2.4.0                 # Array operations
+pandas==2.3.0                # Data frames for results & QC reports
+
+# Visualization
+matplotlib==3.10.8           # Plotting training results & defect visualization
+
+# Configuration
+pyyaml==6.0.3                # YAML config file parsing
+
+# === OPTIONAL DEPENDENCIES ===
+
+# Development Tools (uncomment if needed)
+# black==25.12.0             # Code formatter
+# mypy==1.19.1               # Type checker
+
+# Data Sources (uncomment if downloading datasets)
+# kaggle==1.8.3              # Kaggle API
+# kagglehub==0.4.0           # Kaggle Hub
+
+# Web Interface (uncomment if building Streamlit app)
+# streamlit==1.53.0          # Web app framework
+# altair==6.0.0              # Streamlit charts
+
+# Advanced Visualization (uncomment if needed)
+# seaborn==0.13.2            # Statistical plots
+
+# GPU Acceleration Alternative (uncomment if using CuPy instead of PyTorch)
+# cupy-cuda13x==13.6.0       # CuPy for GPU arrays

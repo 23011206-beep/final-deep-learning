@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Dataset (quá nặng - không upload)
+train/
+valid/
+test/
+
+# Training Results (quá nặng - không upload)
+runs/
+
+# Model Weights (rất nặng - không upload)
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Images/Videos generated during testing
+detection_*.jpg
+detection_*.png
+*.mp4
+*.avi
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# PyTorch
+*.pth.tar
+
+# Data files that are too large
+*.zip
+*.tar.gz
+*.rar
