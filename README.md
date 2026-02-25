@@ -265,7 +265,86 @@ Sau khi training, kết quả sẽ được lưu trong `runs/detect/pcb_defect_d
 - **results.png**: Training curves (loss, mAP, precision, recall)
 - **training_analysis.png**: Phân tích chi tiết (custom plot)
 
-## Metrics Đánh giá
+## Kết quả Test (Evaluation trên Test Set)
+
+> **Model:** YOLOv8s (small) — 11.1M parameters, 28.4 GFLOPs  
+> **Test set:** 70 ảnh, 301 instances lỗi  
+> **Confidence threshold:** 0.25 | **IoU threshold:** 0.45 | **Image size:** 640×640  
+> **GPU:** NVIDIA GeForce RTX 4050 Laptop GPU  
+> **Tốc độ:** 1.8ms tiền xử lý, 14.3ms suy luận, 2.8ms hậu xử lý/ảnh  
+
+### Kết quả tổng quan
+
+| Metric | Giá trị |
+|--------|---------|
+| **Precision** | **94.3%** |
+| **Recall** | **90.1%** |
+| **mAP@0.5** | **93.2%** |
+| **mAP@0.5:0.95** | **51.1%** |
+
+### Kết quả chi tiết theo từng loại lỗi
+
+| Loại lỗi | Instances | Precision | Recall | AP@0.5 | AP@0.5:0.95 |
+|-----------|-----------|-----------|--------|--------|-------------|
+| **missing_hole** | 75 | 98.3% | 98.7% | 98.3% | 63.0% |
+| **mouse_bite** | 52 | 88.6% | 89.9% | 91.2% | 47.1% |
+| **open_circuit** | 37 | 97.0% | 88.8% | 96.2% | 55.9% |
+| **short** | 39 | 97.4% | 97.0% | 98.5% | 54.5% |
+| **spur** | 30 | 90.6% | 76.7% | 82.2% | 37.2% |
+| **spurious_copper** | 68 | 93.7% | 89.7% | 93.0% | 48.7% |
+
+### Giải thích các chỉ số đánh giá
+
+#### 1. **Precision (Độ chính xác) — 94.3%**
+Precision đo tỉ lệ các dự đoán đúng trong tổng số dự đoán mà model đưa ra. Nói cách khác, khi model nói "đây là lỗi", thì **94.3% trường hợp là đúng**. Precision cao nghĩa là model ít đưa ra cảnh báo sai (false positive).
+
+> **Công thức:** `Precision = TP / (TP + FP)`  
+> Trong đó: TP = True Positive (dự đoán đúng), FP = False Positive (dự đoán sai — báo lỗi nhưng thực tế không có lỗi)
+
+#### 2. **Recall (Độ phủ) — 90.1%**
+Recall đo tỉ lệ các lỗi thực tế mà model phát hiện được. Với Recall 90.1%, model phát hiện được **90.1% tổng số lỗi** có trong ảnh. Recall cao nghĩa là model ít bỏ sót lỗi (false negative).
+
+> **Công thức:** `Recall = TP / (TP + FN)`  
+> Trong đó: FN = False Negative (bỏ sót — có lỗi nhưng model không phát hiện)
+
+#### 3. **mAP@0.5 (Mean Average Precision tại IoU 0.5) — 93.2%**
+Đây là chỉ số quan trọng nhất trong object detection. mAP@0.5 đánh giá khả năng phát hiện lỗi khi yêu cầu bounding box dự đoán trùng ít nhất **50%** với bounding box thực tế (IoU ≥ 0.5). Giá trị này là **trung bình AP của tất cả 6 loại lỗi**.
+
+> **IoU (Intersection over Union):** Tỉ lệ diện tích giao nhau giữa bounding box dự đoán và ground truth.
+
+#### 4. **mAP@0.5:0.95 (Mean Average Precision trung bình) — 51.1%**
+Chỉ số này **khắt khe hơn** mAP@0.5 rất nhiều. Nó tính trung bình AP tại các ngưỡng IoU từ 0.5 đến 0.95 (bước nhảy 0.05). Nghĩa là model phải khoanh vùng lỗi **rất chính xác** (trùng tới 95% diện tích) mới được tính đúng ở các ngưỡng cao. Đây là metric chuẩn của cuộc thi COCO.
+
+### Đánh giá chất lượng model
+
+#### ✅ Đánh giá tổng quan: **TỐT — Đạt yêu cầu ứng dụng thực tế**
+
+| Chỉ số | Giá trị | Đánh giá |
+|--------|---------|----------|
+| Precision 94.3% | 🟢 **Rất tốt** | Model rất ít đưa ra cảnh báo sai, đáng tin cậy |
+| Recall 90.1% | 🟢 **Tốt** | Phát hiện được hầu hết các lỗi, chỉ bỏ sót ~10% |
+| mAP@0.5 93.2% | 🟢 **Rất tốt** | Khả năng phát hiện + định vị lỗi rất chính xác |
+| mAP@0.5:0.95 51.1% | 🟡 **Trung bình** | Bounding box chưa thật sự khít với lỗi ở ngưỡng cao |
+
+#### Phân tích chi tiết:
+
+1. **Các lỗi phát hiện tốt nhất:**
+   - `missing_hole` (AP@0.5: 98.3%) và `short` (AP@0.5: 98.5%): Gần như phát hiện hoàn hảo. Đây là các lỗi có hình dạng rõ ràng, dễ nhận diện.
+
+2. **Lỗi cần cải thiện:**
+   - `spur` (AP@0.5: 82.2%, Recall: 76.7%): Đây là loại lỗi khó nhất vì gai đồng thường rất nhỏ, dễ bị bỏ sót (~23% bị miss). Cần thêm data hoặc augmentation cho loại lỗi này.
+
+3. **So sánh với tiêu chuẩn ngành:**
+   - mAP@0.5 > 90% được coi là **rất tốt** cho bài toán object detection trong công nghiệp.
+   - mAP@0.5:0.95 ở mức 51% là **bình thường** — chỉ số này luôn thấp hơn nhiều so với mAP@0.5 do yêu cầu khắt khe.
+   - Precision > 94% đảm bảo hệ thống **không gây nhiều phiền toái** bằng cảnh báo sai trong sản xuất.
+
+4. **Kết luận:**
+   - Model **đủ tốt** để triển khai vào hệ thống kiểm tra chất lượng PCB tự động.
+   - Tốc độ inference ~14.3ms/ảnh (~70 FPS) cho phép ứng dụng **real-time** qua webcam.
+   - Để cải thiện thêm, có thể: tăng data cho `spur`, sử dụng model lớn hơn (YOLOv8m/l), hoặc fine-tune augmentation.
+
+## Giải thích Metrics
 
 - **mAP@0.5**: Mean Average Precision tại IoU threshold 0.5
 - **mAP@0.5:0.95**: Mean Average Precision trung bình từ IoU 0.5 đến 0.95
