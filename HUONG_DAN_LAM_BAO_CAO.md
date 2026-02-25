@@ -84,21 +84,24 @@ chất lượng (QC) PASS/FAIL.
 - **Ngôn ngữ:** Python 3.10+
 - **Sản phẩm:** Module code + Scripts + QC Reports + Documentation
 
-### 1.4. Phân công công việc nhóm (Nếu có)
+### 1.4. Phân công công việc nhóm
 
-**Ví dụ:**
 ```
 [Bảng 1.1] Phân công công việc
 
-| Thành viên | Công việc chính                           |
-|------------|-------------------------------------------|
-| Thành viên A | Dataset preparation, Training            |
-| Thành viên B | Code module development, Testing         |
-| Thành viên C | Webcam implementation, Documentation     |
-| Toàn nhóm   | Testing, Debugging, Report writing       |
+| Thành viên   | Phần báo cáo                | Công việc chính                                      |
+|--------------|-----------------------------|------------------------------------------------------|
+| Thành viên A | II (YOLOv8 & Dataset)       | Dataset preparation, Training, Thu thập kết quả      |
+|              | IV (Kết quả thực nghiệm)    | Chạy test, chụp hình, điền số liệu metrics          |
+| Thành viên B | III (Thiết kế & Triển khai) | Đọc kỹ code, vẽ sơ đồ, mô tả kiến trúc hệ thống   |
+|              | ⭐ Phần quan trọng nhất      | Phân tích DefectDetector, scripts, design principles |
+| Thành viên C | I (Giới thiệu & Mục tiêu)  | Viết đặt vấn đề, mục tiêu, phạm vi                  |
+|              | V (Đánh giá & Kết luận)    | Đánh giá, kết luận, hướng phát triển                 |
+|              | VI + Phụ lục               | Tài liệu tham khảo, phụ lục, tổng hợp & format      |
+| Toàn nhóm    |                             | Review chéo, kiểm tra lỗi, thống nhất văn phong     |
 ```
 
-*(Nếu làm cá nhân, bỏ qua phần này hoặc viết "Dự án thực hiện bởi...")*
+> **Chi tiết phân chia:** Xem file `PHAN_CHIA_CONG_VIEC.md`
 
 ### 1.5. Bố cục báo cáo
 
@@ -153,18 +156,21 @@ Input Image → [Backbone] → [Neck] → [Head] → Outputs
 ```
 [Bảng 2.1] Thông tin Dataset
 
-| Thông tin        | Chi tiết                                |
-|------------------|-----------------------------------------|
-| Nguồn            | Roboflow / PKU-Market-PCB               |
-| License          | CC BY 4.0                               |
-| Tổng số ảnh      | [Số ảnh trong dataset]                  |
-| Training         | [Số ảnh train]                          |
-| Validation       | [Số ảnh val]                            |
-| Test             | [Số ảnh test]                           |
-| Số classes       | 6 loại lỗi PCB                          |
-| Format           | YOLO (TXT annotations)                  |
-| Image size       | Đa dạng (resize về 640x640 khi train)   |
+| Thông tin        | Chi tiết                                         |
+|------------------|--------------------------------------------------|
+| Nguồn            | Roboflow / Kaggle (akhatova/pcb-defects)         |
+| License          | CC BY 4.0                                        |
+| Tổng số ảnh      | 2771 ảnh                                         |
+| Training         | 2425 ảnh (87.5%)                                 |
+| Validation       | 276 ảnh (10.0%)                                  |
+| Test             | 70 ảnh (2.5%)                                    |
+| Số classes       | 6 loại lỗi PCB                                   |
+| Format           | YOLO (TXT annotations)                           |
+| Image size       | Đa dạng (resize về 640x640 khi train)            |
 ```
+
+> **Lưu ý:** Dataset gốc từ Kaggle (Pascal VOC format) được chuyển sang YOLO format
+> bằng script `convert_dataset.py` do nhóm viết.
 
 **2.2.2. 6 Loại lỗi PCB:**
 
@@ -240,14 +246,16 @@ Input Image → [Backbone] → [Neck] → [Head] → Outputs
 ```
 [Bảng 3.1] Technology Stack
 
-| Layer            | Công nghệ/Tool                          |
-|------------------|-----------------------------------------|
-| Deep Learning    | PyTorch, YOLOv8 (Ultralytics)           |
-| Computer Vision  | OpenCV, Pillow                          |
-| Data Processing  | NumPy, Pandas                           |
-| Visualization    | Matplotlib                              |
-| Development      | Python 3.10, Git, GitHub                |
-| Hardware         | [GPU/CPU cụ thể bạn dùng]              |
+| Layer            | Công nghệ/Tool                          | Version         |
+|------------------|------------------------------------------|-----------------|
+| Deep Learning    | PyTorch, YOLOv8 (Ultralytics)           | ultralytics 8.4 |
+| Computer Vision  | OpenCV                                  | 4.13.0          |
+| Data Processing  | NumPy, Pandas                           | 2.4 / 2.3       |
+| Data Augmentation| Albumentations                          | (simulate_webcam)|
+| Visualization    | Matplotlib                              | 3.10            |
+| Configuration    | PyYAML                                  | 6.0             |
+| Development      | Python 3.10+, Git, GitHub               |                 |
+| Hardware         | [GPU/CPU cụ thể bạn dùng]              |                 |
 ```
 
 ### 3.2. Thiết kế Module Code
@@ -263,28 +271,68 @@ Input Image → [Backbone] → [Neck] → [Head] → Outputs
 
 Final-Deep-Learning-main/
 │
-├── defect_detector.py              ◄─── CORE MODULE
+├── defect_detector.py              ◄─── CORE MODULE (1191 dòng)
+│   ├── Constants: DEFECT_COLORS, DEFECT_DESCRIPTIONS, DEFECT_SEVERITY
 │   ├── Class: DefectDetector
-│   │     ├── __init__()         # Khởi tạo model
-│   │     ├── train()            # Training logic
-│   │     ├── predict()          # Inference / Phát hiện lỗi
-│   │     ├── validate()         # Validation
-│   │     ├── analyze_defects()  # Phân tích chi tiết lỗi + mức độ nghiêm trọng
-│   │     ├── visualize()        # Visualization với QC status
-│   │     └── generate_report()  # Tạo báo cáo QC (CSV)
+│   │     ├── __init__()             # Khởi tạo model YOLOv8
+│   │     ├── load_data_config()     # Load data.yaml
+│   │     ├── train()                # Training pipeline
+│   │     ├── validate()             # Validation
+│   │     ├── predict()              # Inference / Phát hiện lỗi
+│   │     ├── export()               # Export model (ONNX, TFLite...)
+│   │     ├── load_weights()         # Load trained weights
+│   │     ├── analyze_defects()      # Phân tích chi tiết lỗi + severity
+│   │     ├── visualize_predictions()# Visualization với QC status
+│   │     └── generate_report()      # Tạo báo cáo QC (CSV)
 │   │
-│   └── Class: WebcamDefectDetector
-│         ├── __init__()         # Load model
-│         └── run()              # Real-time defect detection
+│   ├── Class: TrackedDetection      ◄─── IoU Tracking cho Webcam
+│   │     ├── __init__()             # Lưu bbox, class, confidence, hold_time
+│   │     ├── update()               # Cập nhật khi phát hiện lại
+│   │     ├── mark_missed()          # Đánh dấu mất detection
+│   │     ├── get_opacity()          # Tính opacity (hiệu ứng mờ dần)
+│   │     └── is_expired()           # Kiểm tra hết hạn
+│   │
+│   ├── Class: WebcamDefectDetector  ◄─── Real-time Detection (cải tiến)
+│   │     ├── __init__()             # Load model + tracking config
+│   │     ├── _assign_colors()       # Gán màu cho từng loại lỗi
+│   │     ├── _update_tracked_detections()  # IoU matching
+│   │     ├── _draw_tracked_detection()     # Vẽ bbox với opacity
+│   │     └── run()                  # Real-time detection loop
+│   │
+│   ├── Function: _compute_iou()     # Tính IoU giữa 2 bbox
+│   └── Function: plot_training_results()  # Plot training curves
 │
-├── train_detector.py                ◄─── TRAINING SCRIPT
-│   └── CLI để train với args
+├── train_detector.py                ◄─── TRAINING SCRIPT (333 dòng)
+│   └── CLI để train với argparse (model, epochs, batch, device...)
 │
-├── test_detector.py                 ◄─── TESTING SCRIPT
-│   └── CLI để test + tạo QC report
+├── test_detector.py                 ◄─── TESTING SCRIPT (249 dòng)
+│   └── CLI để test + QC report + visualization
 │
-└── webcam_detector.py               ◄─── WEBCAM SCRIPT
-    └── CLI để chạy webcam detection
+├── webcam_detector.py               ◄─── WEBCAM SCRIPT (94 dòng)
+│   └── CLI để chạy webcam detection (hold-time, conf, iou...)
+│
+├── collect_webcam_data.py           ◄─── THU THẬP DỮ LIỆU WEBCAM (402 dòng)
+│   ├── record_video()               # Quay video PCB từ webcam
+│   ├── extract_frames()             # Trích xuất frame từ video
+│   └── show_guide()                 # Hướng dẫn quy trình
+│
+├── simulate_webcam.py               ◄─── MÔ PHỎNG WEBCAM (356 dòng)
+│   ├── create_webcam_transform()    # Augmentation giả lập webcam
+│   └── simulate_webcam_images()     # Tạo ảnh "webcam" từ ảnh gốc
+│
+├── download_dataset.py              ◄─── TẢI DATASET (330 dòng)
+│   ├── download_from_roboflow()     # Tải từ Roboflow API
+│   ├── download_from_kaggle()       # Tải từ Kaggle
+│   └── organize_dataset()           # Sắp xếp vào train/valid/test
+│
+├── convert_dataset.py               ◄─── CHUYỂN ĐỔI DATASET (233 dòng)
+│   ├── parse_voc_xml()              # Parse Pascal VOC XML
+│   ├── voc_to_yolo()                # VOC → YOLO format
+│   └── convert_dataset()            # Main conversion + split
+│
+├── data.yaml                        ◄─── CẤU HÌNH DATASET
+├── requirements.txt                 ◄─── DEPENDENCIES
+└── README.md                        ◄─── DOCUMENTATION
 ```
 
 **3.2.2. Design Principles:**
@@ -327,24 +375,68 @@ class DefectDetector:
     
     def __init__(self, model_type='n', pretrained=True):
         """Khởi tạo model với pretrained weights"""
-        pass
     
-    def train(self, data_yaml, epochs, batch, ...):
+    def load_data_config(self, data_yaml_path):
+        """Load data configuration từ data.yaml"""
+    
+    def train(self, data_yaml, epochs, imgsz, batch, device, ...):
         """Training pipeline cho defect detection"""
-        pass
     
-    def analyze_defects(self, image_path, conf):
+    def validate(self, data_yaml=None, **kwargs):
+        """Validate the model"""
+    
+    def predict(self, source, conf, iou, imgsz, save, ...):
+        """Run inference - Phát hiện lỗi trên ảnh PCB"""
+    
+    def export(self, format='onnx', **kwargs):
+        """Export model to ONNX, TFLite, etc."""
+    
+    def load_weights(self, weights_path):
+        """Load trained weights (.pt file)"""
+    
+    def analyze_defects(self, image_path, conf=0.25):
         """
         Phân tích chi tiết lỗi trên ảnh PCB:
         - Đếm số lỗi theo từng loại
         - Đánh giá severity
         - Kết luận QC PASS/FAIL
         """
-        pass
+    
+    def visualize_predictions(self, image_path, conf, save_path, show):
+        """Visualize defect predictions với colored boxes + QC status"""
     
     def generate_report(self, image_dir, conf, save_path):
-        """Tạo báo cáo QC cho batch ảnh PCB"""
-        pass
+        """Tạo báo cáo QC cho batch ảnh PCB (CSV format)"""
+```
+
+**3.2.4. Chi tiết WebcamDefectDetector class (Phiên bản cải tiến):**
+
+```python
+class TrackedDetection:
+    """Theo dõi detection qua các frame bằng IoU matching"""
+    # Giữ bounding box trên màn hình tối thiểu hold_time giây
+    # Hiệu ứng mờ dần (fade-out) khi hết thời gian giữ
+
+class WebcamDefectDetector:
+    """
+    Real-time PCB defect detection với các cải tiến:
+    - IoU tracking: Theo dõi lỗi qua các frame
+    - Hold-time: Giữ bbox tối thiểu 2 giây sau phát hiện
+    - Fade-out: Hiệu ứng mờ dần khi hết thời gian
+    - Performance monitoring: FPS, detection count
+    """
+    
+    def __init__(self, model_path, conf_threshold, iou_threshold, hold_time):
+        """Initialize với tracking config"""
+    
+    def _update_tracked_detections(self, new_detections):
+        """IoU matching giữa frame cũ và mới"""
+    
+    def _draw_tracked_detection(self, frame, detection):
+        """Vẽ bbox với hiệu ứng opacity"""
+    
+    def run(self, camera_id, window_name, display_fps):
+        """Real-time detection loop"""
 ```
 
 **Giải thích tại sao thiết kế như vậy:**
@@ -429,15 +521,28 @@ plot_training_results(results_dir)
 
 **3.3.3. Webcam Script (webcam_detector.py):**
 
-> Trình bày tính năng real-time detection qua webcam với performance monitoring, interactive controls, và visual enhancements.
+> Trình bày tính năng real-time detection qua webcam với IoU tracking, hold-time, fade-out effects.
 
 **Đây là tính năng DEMO THỰC TẾ nhóm xây dựng:**
 
 **Features nhóm implement:**
 
-1. **Real-time Performance Monitoring:**
+1. **IoU Tracking (Cải tiến quan trọng):**
    ```python
-   # Display FPS, Detection count, Confidence threshold
+   # Theo dõi lỗi qua các frame bằng IoU matching
+   # Detection mới trùng vị trí (IoU cao) với cũ → cập nhật
+   # Detection cũ không match → giữ lại trên màn hình (hold-time)
+   # Sau hold-time → hiệu ứng mờ dần (fade-out) trong 0.5 giây
+   
+   class TrackedDetection:
+       hold_time = 2.0  # Giữ tối thiểu 2 giây
+       def get_opacity(self):  # 1.0 → 0.0 (fade-out)
+       def is_expired(self):   # True khi đã mờ hoàn toàn
+   ```
+
+2. **Real-time Performance Monitoring:**
+   ```python
+   # Display FPS, Detection count trên frame
    info_text = [
        f"FPS: {current_fps:.1f}",
        f"Detections: {detection_count}",
@@ -445,32 +550,60 @@ plot_training_results(results_dir)
    ]
    ```
 
-2. **Interactive Controls:**
+3. **CLI Arguments (webcam_detector.py):**
    ```
-   Nhóm thiết kế keyboard controls:
-   - 'q': Quit
-   - 's': Save current frame
-   - 'p': Pause/Resume
-   - '+/-': Adjust confidence threshold
+   Nhóm thiết kế CLI arguments:
+   --weights     Path to trained model (.pt)
+   --camera      Camera ID (default: 0)
+   --conf        Confidence threshold (default: 0.25)
+   --iou         NMS IoU threshold (default: 0.45)
+   --hold-time   Thời gian giữ detection (default: 2.0 giây)
+   --window-name Tên cửa sổ
+   --no-fps      Tắt hiển thị FPS
    ```
 
-3. **Visual Enhancements:**
-   - Colored bounding boxes per class
+4. **Visual Enhancements:**
+   - Colored bounding boxes per class (màu cố định cho từng loại lỗi)
    - Labels với confidence scores
-   - Info overlay
-   - Frame counter
+   - Hiệu ứng mờ dần (opacity) khi detection hết thời gian giữ
+   - Info overlay với FPS và detection count
+
+**3.3.4. Data Collection Scripts (Nhóm tự phát triển):**
+
+> Nhóm phát triển thêm 2 scripts hỗ trợ thu thập và cải thiện dữ liệu:
+
+1. **collect_webcam_data.py** - Thu thập dữ liệu PCB từ webcam:
+   - Quay video mạch PCB (controls: 'r' record, 's' screenshot, 'q' quit)
+   - Trích xuất frame từ video (3-5 fps)
+   - Hướng dẫn quy trình thu thập → annotate → train lại
+
+2. **simulate_webcam.py** - Mô phỏng chất lượng webcam:
+   - Áp dụng augmentation "làm xấu" ảnh gốc
+   - 3 mức độ: light, medium, heavy
+   - Kỹ thuật: noise, blur, brightness, contrast, compression
+   - Tạo nhiều variants cho mỗi ảnh gốc
+
+3. **download_dataset.py** - Tải dataset tự động:
+   - Hỗ trợ 3 cách: Roboflow API, Kaggle, Manual download
+   - Tự động sắp xếp vào train/valid/test
+
+4. **convert_dataset.py** - Chuyển đổi format:
+   - Pascal VOC (XML) → YOLO format (TXT)
+   - Tự động chia train 70% / valid 20% / test 10%
 
 **Challenges nhóm gặp và giải quyết:**
 
 ```
 [Bảng 3.2] Challenges trong Implementation
 
-| Vấn đề                    | Giải pháp của nhóm              |
-|---------------------------|---------------------------------|
-| FPS thấp khi dùng CPU     | Optimize inference, reduce size |
-| Webcam lag                | Async processing, frame skip    |
-| Bounding box vẽ không đẹp | Custom draw với OpenCV          |
-| Hotkeys không hoạt động   | Use cv.waitKey() đúng cách      |
+| Vấn đề                         | Giải pháp của nhóm                         |
+|---------------------------------|--------------------------------------------|
+| Detection nhấp nháy trên webcam | IoU tracking + hold-time 2 giây            |
+| Bbox biến mất đột ngột         | Hiệu ứng fade-out (opacity mờ dần)        |
+| Webcam chất lượng thấp          | simulate_webcam.py augmentation            |
+| Dataset gốc format VOC          | convert_dataset.py chuyển sang YOLO        |
+| FPS thấp khi dùng CPU          | YOLOv8n (nano) + optimize inference        |
+| Multiprocessing lỗi trên Windows| freeze_support() + spawn start method      |
 ```
 
 ### 3.4. Documentation và Code Quality
@@ -623,16 +756,18 @@ Nhận xét:
 **4.3.1. Metrics trên Test Set:**
 
 ```
-[Bảng 4.2] Kết quả trên Test Set (367 ảnh)
+[Bảng 4.2] Kết quả trên Test Set (70 ảnh)
 
 | Metric           | Giá trị  | Đánh giá        |
 |------------------|----------|-----------------|
-| Precision        | 93.6%    | Rất tốt         |
-| Recall           | 94.3%    | Rất tốt         |
-| mAP@0.5          | 96.4%    | Xuất sắc        |
-| mAP@0.5:0.95     | 67.2%    | Tốt             |
-| Inference Time   | ~8ms     | Real-time       |
+| Precision        | [value]  | [đánh giá]      |
+| Recall           | [value]  | [đánh giá]      |
+| mAP@0.5          | [value]  | [đánh giá]      |
+| mAP@0.5:0.95     | [value]  | [đánh giá]      |
+| Inference Time   | [value]  | Real-time       |
 ```
+
+> **⚠️ LƯU Ý:** Chạy `python test_detector.py` trên test set (70 ảnh) để điền số liệu thực!
 
 **4.3.2. Kết quả theo từng class:**
 
@@ -963,17 +1098,24 @@ chất lượng sản phẩm và giảm chi phí kiểm tra.
 
 **B.1. data.yaml:**
 ```yaml
-train: ../train/images
-val: ../valid/images
-test: ../test/images
+train: ./train/images
+val: ./valid/images
+test: ./test/images
 
 nc: 6
 names: ['missing_hole', 'mouse_bite', 'open_circuit', 'short', 'spur', 'spurious_copper']
+
+roboflow:
+  workspace: pcb-defect-detection
+  project: pcb-defect
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/pcb-defect-detection/pcb-defect
 ```
 
 **B.2. args.yaml (training arguments):**
 ```yaml
-# Chèn nội dung file args.yaml từ runs/detect/.../
+# Chèn nội dung file args.yaml từ runs/detect/runs/pcb_defect_detector/
 ```
 
 ### Phụ lục C: Kết quả chi tiết
