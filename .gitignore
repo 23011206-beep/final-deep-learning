@@ -16,15 +16,6 @@ train/
 valid/
 test/
 
-# Training Results (quá nặng - không upload)
-runs/
-
-# Model Weights (rất nặng - không upload)
-*.pt
-*.pth
-*.onnx
-*.engine
-
 # IDE
 .vscode/
 .idea/
@@ -44,20 +35,57 @@ desktop.ini
 *.tmp
 *.temp
 
-# Images/Videos generated during testing
-detection_*.jpg
-detection_*.png
-*.mp4
-*.avi
-
 # Jupyter Notebook
 .ipynb_checkpoints/
 *.ipynb
-
-# PyTorch
-*.pth.tar
 
 # Data files that are too large
 *.zip
 *.tar.gz
 *.rar
+
+# ===== FILES KHÔNG CẦN NỘP =====
+
+# Pretrained weights gốc (ultralytics tự tải)
+yolo26n.pt
+yolov8n.pt
+yolov8s.pt
+
+# Scripts phụ không cần thiết
+collect_webcam_data.py
+simulate_webcam.py
+plot_beautiful_results.py
+convert_dataset.py
+download_dataset.py
+create_pptx.py
+
+# Ảnh test webcam
+pcb_defect_*.jpg
+pcb_defect_*.png
+detection_*.jpg
+detection_*.png
+*.mp4
+*.avi
+
+# File tài liệu nội bộ
+PHAN_CHIA_CONG_VIEC.md
+CHECKLIST_NOP_BAI.md
+HUONG_DAN_LAM_BAO_CAO.md
+HUONG_DAN_LAM_PP.md
+HUONG_DAN_THUYET_TRINH.md
+README.dataset.txt
+README.roboflow.txt
+
+# PowerPoint
+*.pptx
+
+# PyTorch
+*.pth.tar
+
+# Kết quả training thừa (chỉ giữ pcb_defect_detector)
+runs/detect/val*/
+runs/detect/val2*/
+runs/detect/val3*/
+runs/detect/test*/
+runs/detect/runs/pcb_defect_v2/
+runs/test/
